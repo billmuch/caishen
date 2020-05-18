@@ -116,6 +116,15 @@ public:
     void getLegalActions(std::vector<std::vector<Action_Rank>> & legalActions);
 
     /**
+     * @brief Get current player's Action Cards of Action_Type type and Action_Rank rank
+     * 
+     * @param type 
+     * @param rank 
+     * @param [out] actionCards actionCards will be cleared before add result into it
+     */
+    void getActionCards(Action_Type type, Action_Rank rank, std::vector<std::unique_ptr<Action>> & actionCards);
+
+    /**
      * @brief Get action type ACTION_TYPE_SOLO ranks the player[playerId]'s hand can play, start from startRank
      * 
      * @param playerId

@@ -8,6 +8,8 @@ namespace caishen
 namespace doudizhu
 {
 
+#define ACTION_TYPE_SIZE 38
+
 /**
  * @brief Types of doudizhu action
  * 
@@ -100,6 +102,7 @@ public:
     bool isValidTypeAndRank() const;
 
     inline const ActionDetails getDetails() const { return _details; }
+    inline const std::shared_ptr<const ActionData> getActionData() const {return _pActionData; }
     inline const CARD_ARRAY_DATA_TYPE *data() const { return _pActionData->data(); }
 
 private:

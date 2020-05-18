@@ -69,455 +69,6 @@ TEST(Deck, deal)
     }
 }
 
-TEST(Game, createNewGame)
-{
-
-    std::array<int, 54> deck;
-
-    Deck::setRandomSeed(100);
-    Deck::deal(deck);
-
-    std::unique_ptr<Game> game = Game::createNewGame(deck);
-    ASSERT_EQ(game->getPlayerId(), Game::LAND_LORD_PLAYER_ID);
-    ASSERT_TRUE(game->getHistory().empty());
-    Game::Payoff payoff;
-    ASSERT_FALSE(game->getPayoff(payoff));
-    ASSERT_FALSE(game->isOver());
-
-    GameCards gameCards = game->getCards();
-    Cards_54_1d_Type sum = gameCards.row(0);
-    ASSERT_EQ(gameCards.row(0).sum(), 20);
-    sum += gameCards.row(1);
-    ASSERT_EQ(gameCards.row(1).sum(), 17);
-    sum += gameCards.row(2);
-    ASSERT_EQ(gameCards.row(2).sum(), 17);
-    sum += gameCards.row(4);
-    ASSERT_TRUE(sum.isOnes());
-    ASSERT_EQ(gameCards.row(3).sum(), 3);
-    //if all 3 faceup cards are in land_lord's hands
-    ASSERT_FALSE((gameCards.row(0) < gameCards.row(3)).any());
-}
-
-std::unique_ptr<Game> createGame(std::string landlordCards, std::string player1Cards, std::string player2Cards)
-{
-    Cards_54_1d_Type cards;
-
-    GameCards gameCards(GameCards::Zero());
-
-    gameCards.row(4) = Cards_54_1d_Type::Ones();
-
-    cardsFromString(cards, landlordCards);
-    gameCards.row(0) += cards;
-    gameCards.row(4) -= cards;
-
-    cardsFromString(cards, player1Cards);
-    gameCards.row(1) += cards;
-    gameCards.row(4) -= cards;
-
-    cardsFromString(cards, player2Cards);
-    gameCards.row(2) += cards;
-    gameCards.row(4) -= cards;
-
-    return std::unique_ptr<Game>(new Game(0, gameCards, HistoryActions()));
-}
-
-TEST(Game, playAndPlayBack)
-{
-    std::unique_ptr<Game> game = createGame("S4JR", "S3DA", "D2");
-
-    ASSERT_FALSE(game->playBack());
-
-    ASSERT_FALSE(game->isOver());
-
-    //landlord play Spades 4
-    std::shared_ptr<ActionData> ad(new ActionData(ActionData::Zero()));
-    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad->data()), "S4");
-    Action action = Action(ad, ACTION_TYPE_SOLO, 1);
-
-    ASSERT_TRUE(game->play(action));
-
-    ASSERT_EQ(game->getCards()(0, 4), 0);
-    ASSERT_EQ(game->getCards()(4, 4), 1);
-    ASSERT_FALSE(game->isOver());
-    ASSERT_EQ(game->getHistory().back(), action);
-    ASSERT_EQ(game->getPlayerId(), 1);
-
-    //player1 play Spades 3
-    std::shared_ptr<ActionData> ad1(new ActionData(ActionData::Zero()));
-    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad1->data()), "S3");
-    Action action1 = Action(ad1, ACTION_TYPE_SOLO, 0);
-    ASSERT_FALSE(game->play(action1));
-
-    //player1 play PASS
-    (*ad1).setZero();
-    (*ad1)[54] = 1;
-    Action action11 = Action(ad1, ACTION_TYPE_PASS, 0);
-    ASSERT_TRUE(game->play(action11));
-
-    ASSERT_EQ(game->getPlayerId(), 2);
-    ASSERT_FALSE(game->isOver());
-
-    GameCards cardsBeforePlayBack = game->getCards();
-    HistoryActions historyBeforePlayBack = game->getHistory();
-
-    //player2 play PASS
-    std::shared_ptr<ActionData> ad2(new ActionData(ActionData::Zero()));
-    (*ad2)[54] = 1;
-    Action action2 = Action(ad2, ACTION_TYPE_PASS, 0);
-    ASSERT_TRUE(game->play(action2));
-
-    ASSERT_EQ(game->getPlayerId(), 0);
-    ASSERT_FALSE(game->isOver());
-
-    //landlord play red joker
-    std::shared_ptr<ActionData> ad3(new ActionData(ActionData::Zero()));
-    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad3->data()), "JR");
-    Action action3 = Action(ad3, ACTION_TYPE_SOLO, 14);
-    ASSERT_TRUE(game->play(action3));
-
-    ASSERT_EQ(game->getCards()(0, 3), 0);
-    ASSERT_EQ(game->getCards()(4, 53), 1);
-    ASSERT_TRUE(game->isOver());
-    Game::Payoff payoff;
-    ASSERT_TRUE(game->getPayoff(payoff));
-    ASSERT_TRUE(payoff.isApprox(Game::Payoff({1.0, 0.0, 0.0})));
-
-    //playBack(landlord)
-    ASSERT_TRUE(game->playBack());
-    ASSERT_FALSE(game->isOver());
-    ASSERT_EQ(game->getPlayerId(), 0);
-
-    //playback(player2)
-    ASSERT_TRUE(game->playBack());
-    ASSERT_EQ(game->getPlayerId(), 2);
-    ASSERT_TRUE((game->getCards() - cardsBeforePlayBack).isZero());
-    HistoryActions currHistory = game->getHistory();
-    ASSERT_EQ(currHistory.size(), historyBeforePlayBack.size());
-    for (std::size_t i = 0; i < historyBeforePlayBack.size(); i++)
-    {
-        ASSERT_EQ(currHistory[i], historyBeforePlayBack[i]);
-    }
-
-    //player2 play Diamonds 2
-    std::shared_ptr<ActionData> ad4(new ActionData(ActionData::Zero()));
-    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad4->data()), "D2");
-    Action action4 = Action(ad4, ACTION_TYPE_SOLO, 12);
-    ASSERT_TRUE(game->play(action4));
-
-    ASSERT_TRUE(game->isOver());
-    Game::Payoff payoff1;
-    ASSERT_TRUE(game->getPayoff(payoff1));
-    ASSERT_TRUE(payoff1.isApprox(Game::Payoff({0.0, 1.0, 1.0})));
-}
-
-TEST(Game, get_SOLO_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6S7S8STSJSQSKSAJBJR", "S2", "C2");
-    game->get_SOLO_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14}));
-    game->get_SOLO_Actions(0, 6, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({7, 8, 9, 10, 11, 13, 14}));
-}
-
-TEST(Game, get_SOLO_CHAIN_X_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6S7S8S9STSJSQSKSAD2JBJR", "S2", "C2");
-    game->get_SOLO_CHAIN_X_Actions(5, 0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7}));
-
-    for (int i = 5; i <= 12; i++)
-    {
-        std::vector<int> expect;
-        for (int j = 0; j <= 7 - (i - 5); j++)
-        {
-            expect.push_back(j);
-        }
-        game->get_SOLO_CHAIN_X_Actions(i, 0, 0, ranks);
-        ASSERT_EQ(ranks, expect);
-    }
-}
-
-TEST(Game, get_PAIR_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6S7H7S8H8S9H9STHTSJHJSQHQSKHKSAHAH2D2JBJR", "S2", "C2");
-    game->get_PAIR_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_PAIR_Actions(0, 6, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({6, 7, 8, 9, 10, 11, 12}));
-}
-
-TEST(Game, get_PAIR_CHAIN_X_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6S7H7S8H8S9H9STHTSJHJSQHQSKHKSAHAH2D2JBJR", "S2", "C2");
-    game->get_PAIR_CHAIN_X_Actions(3, 0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9}));
-    for (int i = 3; i <= 10; i++)
-    {
-        std::vector<int> expect;
-        for (int j = 0; j <= 9 - (i - 3); j++)
-        {
-            expect.push_back(j);
-        }
-        game->get_PAIR_CHAIN_X_Actions(i, 0, 0, ranks);
-        ASSERT_EQ(ranks, expect);
-    }
-}
-
-TEST(Game, get_TRIO_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_TRIO_Actions(0, 6, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({6, 7, 8, 9, 10, 11, 12}));
-}
-
-TEST(Game, get_TRIO_CHAIN_X_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_CHAIN_X_Actions(2, 0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    for (int i = 2; i <= 6; i++)
-    {
-        std::vector<int> expect;
-        for (int j = 0; j <= 10 - (i - 2); j++)
-        {
-            expect.push_back(j);
-        }
-        game->get_TRIO_CHAIN_X_Actions(i, 0, 0, ranks);
-        ASSERT_EQ(ranks, expect);
-    }
-}
-
-TEST(Game, get_TRIO_SOLO_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_SOLO_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_TRIO_SOLO_Actions(0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-
-    // 33333
-    game = createGame("S3H3C3D3", "DA", "D2");
-    game->get_TRIO_SOLO_Actions(0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, get_TRIO_SOLO_CHAIN_X_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_SOLO_CHAIN_X_Actions(2, 0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    for (int i = 2; i <= 5; i++)
-    {
-        std::vector<int> expect;
-        for (int j = 0; j <= 10 - (i - 2); j++)
-        {
-            expect.push_back(j);
-        }
-        game->get_TRIO_SOLO_CHAIN_X_Actions(i, 0, 0, ranks);
-        ASSERT_EQ(ranks, expect);
-    }
-
-    // 333444_34, 333444_BR
-    game = createGame("S3H3C3D3S4H4C4D4JBJR", "DA", "D2");
-    game->get_TRIO_SOLO_CHAIN_X_Actions(2, 0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-
-    // 444555666_333
-    game = createGame("S3H3C3D3S4H4C4S5H5C5S6H6C6", "DA", "D2");
-    game->get_TRIO_SOLO_CHAIN_X_Actions(3, 0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-
-    // 444555666_777
-    game = createGame("S4H4C4S5H5C5S6H6C6S7H7C7D7", "DA", "D2");
-    game->get_TRIO_SOLO_CHAIN_X_Actions(3, 0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-
-    // 444555666777_9999
-    game = createGame("S4H4C4S5H5C5S6H6C6S7H7C7S9H9C9D9", "DA", "D2");
-    game->get_TRIO_SOLO_CHAIN_X_Actions(4, 0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, get_TRIO_PAIR_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_PAIR_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_TRIO_PAIR_Actions(0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-}
-
-TEST(Game, get_TRIO_PAIR_CHAIN_X_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
-    game->get_TRIO_PAIR_CHAIN_X_Actions(2, 0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    for (int i = 2; i <= 4; i++)
-    {
-        std::vector<int> expect;
-        for (int j = 0; j <= 10 - (i - 2); j++)
-        {
-            expect.push_back(j);
-        }
-        game->get_TRIO_PAIR_CHAIN_X_Actions(i, 0, 0, ranks);
-        ASSERT_EQ(ranks, expect);
-    }
-
-    // 33334444_8888
-    game = createGame("S3H3C3D3S4H4C4D4S8H8C8D8JBJR", "DA", "D2");
-    game->get_TRIO_PAIR_CHAIN_X_Actions(2, 0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, get_FOUR_TWO_SOLO_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
-    game->get_FOUR_TWO_SOLO_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_FOUR_TWO_SOLO_Actions(0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-
-    // 3333_BR
-    game = createGame("S3H3C3D3JBJR", "DA", "D2");
-    game->get_FOUR_TWO_SOLO_Actions(0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, get_FOUR_TWO_PAIR_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
-    game->get_FOUR_TWO_PAIR_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_FOUR_TWO_PAIR_Actions(0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-
-    // 3333_4444
-    game = createGame("S3H3C3D3S4H4C4D4", "DA", "D2");
-    game->get_FOUR_TWO_PAIR_Actions(0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, get_BOMB_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
-    game->get_BOMB_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    game->get_BOMB_Actions(0, 2, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-}
-
-TEST(Game, get_ROCKET_Actions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<Action_Rank> ranks;
-
-    game = createGame("JBJR", "DA", "D2");
-    game->get_ROCKET_Actions(0, 0, ranks);
-    ASSERT_EQ(ranks, std::vector<int>({0}));
-
-    game = createGame("JB", "DA", "D2");
-    game->get_ROCKET_Actions(0, 0, ranks);
-    ASSERT_TRUE(ranks.empty());
-}
-
-TEST(Game, getAllActions)
-{
-    std::unique_ptr<Game> game;
-    std::vector<std::vector<Action_Rank>> ranks;
-
-    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "");
-    game->getAllActions(0, ranks);
-
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_7], std::vector<int>({0, 1, 2, 3, 4, 5}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_8], std::vector<int>({0, 1, 2, 3, 4}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_9], std::vector<int>({0, 1, 2, 3}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_10], std::vector<int>({0, 1, 2}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_11], std::vector<int>({0, 1}));
-    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_12], std::vector<int>({0}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_7], std::vector<int>({0, 1, 2, 3, 4, 5}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_8], std::vector<int>({0, 1, 2, 3, 4}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_9], std::vector<int>({0, 1, 2, 3}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_10], std::vector<int>({0, 1, 2}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
-    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
-    ASSERT_EQ(ranks[ACTION_TYPE_FOUR_TWO_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_FOUR_TWO_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_BOMB], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
-    ASSERT_EQ(ranks[ACTION_TYPE_ROCKET], std::vector<int>({0}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PASS], std::vector<int>({0}));
-
-    game = createGame("S3H3C3D3S4H4C4D4", "", "");
-    game->getAllActions(0, ranks);
-    ASSERT_TRUE(ranks[ACTION_TYPE_FOUR_TWO_PAIR].empty());
-
-    game = createGame("S3H3C3D3S4H4C4D4", "", "");
-    game->getAllActions(0, ranks);
-    ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_2].empty());
-    ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_2].empty());
-}
-
 TEST(utils, cardsFromString)
 {
     Cards_54_1d_Type cards;
@@ -1082,4 +633,605 @@ TEST(utils, get_PASS_ActionCards)
 
     get_PASS_ActionCards(fullDeck, 0, pad);
     ASSERT_TRUE(isValidActionTypeAndRank(pad, ACTION_TYPE_PASS, 0));
+}
+
+TEST(Game, createNewGame)
+{
+
+    std::array<int, 54> deck;
+
+    Deck::setRandomSeed(100);
+    Deck::deal(deck);
+
+    std::unique_ptr<Game> game = Game::createNewGame(deck);
+    ASSERT_EQ(game->getPlayerId(), Game::LAND_LORD_PLAYER_ID);
+    ASSERT_TRUE(game->getHistory().empty());
+    Game::Payoff payoff;
+    ASSERT_FALSE(game->getPayoff(payoff));
+    ASSERT_FALSE(game->isOver());
+
+    GameCards gameCards = game->getCards();
+    Cards_54_1d_Type sum = gameCards.row(LANDLORD_CARDS_ROW);
+    ASSERT_EQ(gameCards.row(LANDLORD_CARDS_ROW).sum(), 20);
+    sum += gameCards.row(PLAYER_1_CARDS_ROW);
+    ASSERT_EQ(gameCards.row(PLAYER_1_CARDS_ROW).sum(), 17);
+    sum += gameCards.row(PLAYER_2_CARDS_ROW);
+    ASSERT_EQ(gameCards.row(PLAYER_2_CARDS_ROW).sum(), 17);
+    sum += gameCards.row(PUBLIC_CARDS_ROW);
+    ASSERT_TRUE(sum.isOnes());
+    ASSERT_EQ(gameCards.row(FACEUP_CARDS_ROW).sum(), 3);
+    //if all 3 faceup cards are in land_lord's hands
+    ASSERT_FALSE((gameCards.row(LANDLORD_CARDS_ROW) < gameCards.row(FACEUP_CARDS_ROW)).any());
+}
+
+std::unique_ptr<Game> createGame(std::string landlordCards, std::string player1Cards, std::string player2Cards, std::string faceupCards = "")
+{
+    Cards_54_1d_Type cards;
+
+    GameCards gameCards(GameCards::Zero());
+
+    gameCards.row(PUBLIC_CARDS_ROW) = Cards_54_1d_Type::Ones();
+
+    cardsFromString(cards, landlordCards);
+    gameCards.row(LANDLORD_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
+
+    cardsFromString(cards, player1Cards);
+    gameCards.row(PLAYER_1_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
+
+    cardsFromString(cards, player2Cards);
+    gameCards.row(PLAYER_2_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
+
+    if (faceupCards != "")
+    {
+        cardsFromString(cards, faceupCards);
+        gameCards.row(FACEUP_CARDS_ROW) += cards;
+    }
+
+    return std::unique_ptr<Game>(new Game(0, gameCards, HistoryActions()));
+}
+
+TEST(Game, playAndPlayBack)
+{
+    std::unique_ptr<Game> game = createGame("S4JR", "S3DA", "D2");
+
+    ASSERT_FALSE(game->playBack());
+
+    ASSERT_FALSE(game->isOver());
+
+    //landlord play Spades 4
+    std::shared_ptr<ActionData> ad(new ActionData(ActionData::Zero()));
+    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad->data()), "S4");
+    Action action = Action(ad, ACTION_TYPE_SOLO, 1);
+
+    ASSERT_TRUE(game->play(action));
+
+    ASSERT_EQ(game->getCards()(0, 4), 0);
+    ASSERT_EQ(game->getCards()(4, 4), 1);
+    ASSERT_FALSE(game->isOver());
+    ASSERT_EQ(game->getHistory().back(), action);
+    ASSERT_EQ(game->getPlayerId(), 1);
+
+    //player1 play Spades 3
+    std::shared_ptr<ActionData> ad1(new ActionData(ActionData::Zero()));
+    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad1->data()), "S3");
+    Action action1 = Action(ad1, ACTION_TYPE_SOLO, 0);
+    ASSERT_FALSE(game->play(action1));
+
+    //player1 play PASS
+    (*ad1).setZero();
+    (*ad1)[54] = 1;
+    Action action11 = Action(ad1, ACTION_TYPE_PASS, 0);
+    ASSERT_TRUE(game->play(action11));
+
+    ASSERT_EQ(game->getPlayerId(), 2);
+    ASSERT_FALSE(game->isOver());
+
+    GameCards cardsBeforePlayBack = game->getCards();
+    HistoryActions historyBeforePlayBack = game->getHistory();
+
+    //player2 play PASS
+    std::shared_ptr<ActionData> ad2(new ActionData(ActionData::Zero()));
+    (*ad2)[54] = 1;
+    Action action2 = Action(ad2, ACTION_TYPE_PASS, 0);
+    ASSERT_TRUE(game->play(action2));
+
+    ASSERT_EQ(game->getPlayerId(), 0);
+    ASSERT_FALSE(game->isOver());
+
+    //landlord play red joker
+    std::shared_ptr<ActionData> ad3(new ActionData(ActionData::Zero()));
+    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad3->data()), "JR");
+    Action action3 = Action(ad3, ACTION_TYPE_SOLO, 14);
+    ASSERT_TRUE(game->play(action3));
+
+    ASSERT_EQ(game->getCards()(0, 3), 0);
+    ASSERT_EQ(game->getCards()(4, 53), 1);
+    ASSERT_TRUE(game->isOver());
+    Game::Payoff payoff;
+    ASSERT_TRUE(game->getPayoff(payoff));
+    ASSERT_TRUE(payoff.isApprox(Game::Payoff({1.0, 0.0, 0.0})));
+
+    //playBack(landlord)
+    ASSERT_TRUE(game->playBack());
+    ASSERT_FALSE(game->isOver());
+    ASSERT_EQ(game->getPlayerId(), 0);
+
+    //playback(player2)
+    ASSERT_TRUE(game->playBack());
+    ASSERT_EQ(game->getPlayerId(), 2);
+    ASSERT_TRUE((game->getCards() - cardsBeforePlayBack).isZero());
+    HistoryActions currHistory = game->getHistory();
+    ASSERT_EQ(currHistory.size(), historyBeforePlayBack.size());
+    for (std::size_t i = 0; i < historyBeforePlayBack.size(); i++)
+    {
+        ASSERT_EQ(currHistory[i], historyBeforePlayBack[i]);
+    }
+
+    //player2 play Diamonds 2
+    std::shared_ptr<ActionData> ad4(new ActionData(ActionData::Zero()));
+    cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad4->data()), "D2");
+    Action action4 = Action(ad4, ACTION_TYPE_SOLO, 12);
+    ASSERT_TRUE(game->play(action4));
+
+    ASSERT_TRUE(game->isOver());
+    Game::Payoff payoff1;
+    ASSERT_TRUE(game->getPayoff(payoff1));
+    ASSERT_TRUE(payoff1.isApprox(Game::Payoff({0.0, 1.0, 1.0})));
+}
+
+TEST(Game, get_SOLO_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6S7S8STSJSQSKSAJBJR", "S2", "C2");
+    game->get_SOLO_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14}));
+    game->get_SOLO_Actions(0, 6, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({7, 8, 9, 10, 11, 13, 14}));
+}
+
+TEST(Game, get_SOLO_CHAIN_X_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6S7S8S9STSJSQSKSAD2JBJR", "S2", "C2");
+    game->get_SOLO_CHAIN_X_Actions(5, 0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7}));
+
+    for (int i = 5; i <= 12; i++)
+    {
+        std::vector<int> expect;
+        for (int j = 0; j <= 7 - (i - 5); j++)
+        {
+            expect.push_back(j);
+        }
+        game->get_SOLO_CHAIN_X_Actions(i, 0, 0, ranks);
+        ASSERT_EQ(ranks, expect);
+    }
+}
+
+TEST(Game, get_PAIR_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6S7H7S8H8S9H9STHTSJHJSQHQSKHKSAHAH2D2JBJR", "S2", "C2");
+    game->get_PAIR_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_PAIR_Actions(0, 6, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({6, 7, 8, 9, 10, 11, 12}));
+}
+
+TEST(Game, get_PAIR_CHAIN_X_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6S7H7S8H8S9H9STHTSJHJSQHQSKHKSAHAH2D2JBJR", "S2", "C2");
+    game->get_PAIR_CHAIN_X_Actions(3, 0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9}));
+    for (int i = 3; i <= 10; i++)
+    {
+        std::vector<int> expect;
+        for (int j = 0; j <= 9 - (i - 3); j++)
+        {
+            expect.push_back(j);
+        }
+        game->get_PAIR_CHAIN_X_Actions(i, 0, 0, ranks);
+        ASSERT_EQ(ranks, expect);
+    }
+}
+
+TEST(Game, get_TRIO_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_TRIO_Actions(0, 6, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({6, 7, 8, 9, 10, 11, 12}));
+}
+
+TEST(Game, get_TRIO_CHAIN_X_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_CHAIN_X_Actions(2, 0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    for (int i = 2; i <= 6; i++)
+    {
+        std::vector<int> expect;
+        for (int j = 0; j <= 10 - (i - 2); j++)
+        {
+            expect.push_back(j);
+        }
+        game->get_TRIO_CHAIN_X_Actions(i, 0, 0, ranks);
+        ASSERT_EQ(ranks, expect);
+    }
+}
+
+TEST(Game, get_TRIO_SOLO_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_SOLO_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_TRIO_SOLO_Actions(0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+
+    // 33333
+    game = createGame("S3H3C3D3", "DA", "D2");
+    game->get_TRIO_SOLO_Actions(0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, get_TRIO_SOLO_CHAIN_X_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_SOLO_CHAIN_X_Actions(2, 0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    for (int i = 2; i <= 5; i++)
+    {
+        std::vector<int> expect;
+        for (int j = 0; j <= 10 - (i - 2); j++)
+        {
+            expect.push_back(j);
+        }
+        game->get_TRIO_SOLO_CHAIN_X_Actions(i, 0, 0, ranks);
+        ASSERT_EQ(ranks, expect);
+    }
+
+    // 333444_34, 333444_BR
+    game = createGame("S3H3C3D3S4H4C4D4JBJR", "DA", "D2");
+    game->get_TRIO_SOLO_CHAIN_X_Actions(2, 0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+
+    // 444555666_333
+    game = createGame("S3H3C3D3S4H4C4S5H5C5S6H6C6", "DA", "D2");
+    game->get_TRIO_SOLO_CHAIN_X_Actions(3, 0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+
+    // 444555666_777
+    game = createGame("S4H4C4S5H5C5S6H6C6S7H7C7D7", "DA", "D2");
+    game->get_TRIO_SOLO_CHAIN_X_Actions(3, 0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+
+    // 444555666777_9999
+    game = createGame("S4H4C4S5H5C5S6H6C6S7H7C7S9H9C9D9", "DA", "D2");
+    game->get_TRIO_SOLO_CHAIN_X_Actions(4, 0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, get_TRIO_PAIR_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_PAIR_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_TRIO_PAIR_Actions(0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+}
+
+TEST(Game, get_TRIO_PAIR_CHAIN_X_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6S7H7C7S8H8C8S9H9C9STHTCTSJHJCJSQHQCQSKHKCKSAHACAS2H2C2JBJR", "DA", "D2");
+    game->get_TRIO_PAIR_CHAIN_X_Actions(2, 0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    for (int i = 2; i <= 4; i++)
+    {
+        std::vector<int> expect;
+        for (int j = 0; j <= 10 - (i - 2); j++)
+        {
+            expect.push_back(j);
+        }
+        game->get_TRIO_PAIR_CHAIN_X_Actions(i, 0, 0, ranks);
+        ASSERT_EQ(ranks, expect);
+    }
+
+    // 33334444_8888
+    game = createGame("S3H3C3D3S4H4C4D4S8H8C8D8JBJR", "DA", "D2");
+    game->get_TRIO_PAIR_CHAIN_X_Actions(2, 0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, get_FOUR_TWO_SOLO_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
+    game->get_FOUR_TWO_SOLO_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_FOUR_TWO_SOLO_Actions(0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+
+    // 3333_BR
+    game = createGame("S3H3C3D3JBJR", "DA", "D2");
+    game->get_FOUR_TWO_SOLO_Actions(0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, get_FOUR_TWO_PAIR_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
+    game->get_FOUR_TWO_PAIR_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_FOUR_TWO_PAIR_Actions(0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+
+    // 3333_4444
+    game = createGame("S3H3C3D3S4H4C4D4", "DA", "D2");
+    game->get_FOUR_TWO_PAIR_Actions(0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, get_BOMB_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
+    game->get_BOMB_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    game->get_BOMB_Actions(0, 2, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+}
+
+TEST(Game, get_ROCKET_Actions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<Action_Rank> ranks;
+
+    game = createGame("JBJR", "DA", "D2");
+    game->get_ROCKET_Actions(0, 0, ranks);
+    ASSERT_EQ(ranks, std::vector<int>({0}));
+
+    game = createGame("JB", "DA", "D2");
+    game->get_ROCKET_Actions(0, 0, ranks);
+    ASSERT_TRUE(ranks.empty());
+}
+
+TEST(Game, getAllActions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<std::vector<Action_Rank>> ranks;
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "");
+    game->getAllActions(0, ranks);
+
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_7], std::vector<int>({0, 1, 2, 3, 4, 5}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_8], std::vector<int>({0, 1, 2, 3, 4}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_9], std::vector<int>({0, 1, 2, 3}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_10], std::vector<int>({0, 1, 2}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_11], std::vector<int>({0, 1}));
+    ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_12], std::vector<int>({0}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_7], std::vector<int>({0, 1, 2, 3, 4, 5}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_8], std::vector<int>({0, 1, 2, 3, 4}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_9], std::vector<int>({0, 1, 2, 3}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PAIR_CHAIN_10], std::vector<int>({0, 1, 2}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_CHAIN_6], std::vector<int>({0, 1, 2, 3, 4, 5, 6}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_2], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_3], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    ASSERT_EQ(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_4], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
+    ASSERT_EQ(ranks[ACTION_TYPE_FOUR_TWO_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_FOUR_TWO_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_BOMB], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
+    ASSERT_EQ(ranks[ACTION_TYPE_ROCKET], std::vector<int>({0}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PASS], std::vector<int>({0}));
+
+    game = createGame("S3H3C3D3S4H4C4D4", "", "");
+    game->getAllActions(0, ranks);
+    ASSERT_TRUE(ranks[ACTION_TYPE_FOUR_TWO_PAIR].empty());
+
+    game = createGame("S3H3C3D3S4H4C4D4", "", "");
+    game->getAllActions(0, ranks);
+    ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_2].empty());
+    ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_2].empty());
+}
+
+TEST(Game, getLegalActions)
+{
+    std::unique_ptr<Game> game;
+    std::vector<std::vector<Action_Rank>> legalActions;
+
+    // game over
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "");
+    game->getLegalActions(legalActions);
+
+    ASSERT_TRUE(game->isOver());
+    EXPECT_THAT(legalActions, std::vector<std::vector<Action_Rank>>(ACTION_TYPE_SIZE, std::vector<Action_Rank>()));
+    
+    // full deck 52
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
+    game->getLegalActions(legalActions);
+
+    std::vector<int> v({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14});
+    // no JB, JR for type solo
+    EXPECT_THAT(legalActions[0], std::vector<Action_Rank>(v.begin(), v.begin() + 12 + 1));
+    for (int i = 1; i <= 35; i++)
+    {
+        EXPECT_THAT(legalActions[i], std::vector<Action_Rank>(v.begin(), v.begin() + s_actionTypeMaxRank[i] + 1));
+    }
+
+    // landlord play SOLO, test SOLO, PASS, ROCKET and BOMB
+    {
+        game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6", "S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQJBJR", "SKHKCKDKSAHACADAS2H2C2D2");
+        std::shared_ptr<ActionData> ad(new ActionData(ActionData::Zero()));
+        cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad->data()), "S4");
+        Action action = Action(ad, ACTION_TYPE_SOLO, 1); 
+        game->play(action); // landlord play Spades 4
+        game->getLegalActions(legalActions);
+        EXPECT_THAT(legalActions[ACTION_TYPE_SOLO], std::vector<Action_Rank>({4, 5, 6, 7, 8, 9, 13, 14}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_BOMB], std::vector<Action_Rank>({4, 5, 6, 7, 8, 9}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_ROCKET], std::vector<Action_Rank>({0}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_PASS], std::vector<Action_Rank>({0}));
+        for (int i = 1; i <= 34; i++)
+        {
+            EXPECT_THAT(legalActions[i], std::vector<Action_Rank>());
+        }
+
+        std::shared_ptr<ActionData> ad1(new ActionData(ActionData::Zero()));
+        cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad1->data()), "S7H7C7D7");
+        Action action1 = Action(ad1, ACTION_TYPE_BOMB, 4);
+        game->play(action1); // player1 play bomb, test bomb, rocket and pass
+        game->getLegalActions(legalActions);
+        EXPECT_THAT(legalActions[ACTION_TYPE_BOMB], std::vector<Action_Rank>({10, 11, 12}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_ROCKET], std::vector<Action_Rank>());
+        EXPECT_THAT(legalActions[ACTION_TYPE_PASS], std::vector<Action_Rank>({0}));
+        for (int i = 1; i <= 34; i++)
+        {
+            EXPECT_THAT(legalActions[i], std::vector<Action_Rank>());
+        }
+    }
+
+    {
+        game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6", "S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQJBJR", "SKHKCKDKSAHACADAS2H2C2D2");
+        std::shared_ptr<ActionData> ad(new ActionData(ActionData::Zero()));
+        cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad->data()), "S3H3C3D3");
+        Action action = Action(ad, ACTION_TYPE_BOMB, 0);
+        game->play(action); // landlord play BOMB, test PASS and ROCKET
+        game->getLegalActions(legalActions);
+        EXPECT_THAT(legalActions[ACTION_TYPE_BOMB], std::vector<Action_Rank>({4, 5, 6, 7, 8, 9}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_ROCKET], std::vector<Action_Rank>({0}));
+        EXPECT_THAT(legalActions[ACTION_TYPE_PASS], std::vector<Action_Rank>({0}));
+        for (int i = 0; i <= 34; i++)
+        {
+            EXPECT_THAT(legalActions[i], std::vector<Action_Rank>());
+        }
+
+        std::shared_ptr<ActionData> ad1(new ActionData(ActionData::Zero()));
+        cardsFromString(Eigen::Map<Cards_54_1d_Type>(ad1->data()), "JBJR");
+        Action action1 = Action(ad1, ACTION_TYPE_ROCKET, 0);
+        game->play(action1); // player1 play rocket, test pass
+        game->getLegalActions(legalActions);
+        EXPECT_THAT(legalActions[ACTION_TYPE_PASS], std::vector<Action_Rank>({0}));
+        for (int i = 0; i <= 36; i++)
+        {
+            EXPECT_THAT(legalActions[i], std::vector<Action_Rank>());
+        }
+
+        std::shared_ptr<ActionData> passAd(new ActionData(ActionData::Zero()));
+        (*passAd)[54] = 1;
+        Action passAction = Action(passAd, ACTION_TYPE_PASS, 0);
+        game->play(passAction); // player2 play pass, test pass
+        game->getLegalActions(legalActions);
+        EXPECT_THAT(legalActions[ACTION_TYPE_PASS], std::vector<Action_Rank>({0}));
+        for (int i = 0; i <= 36; i++)
+        {
+            EXPECT_THAT(legalActions[i], std::vector<Action_Rank>());
+        }
+
+        game->play(passAction); // landlord play pass, test getAllActions
+        game->getLegalActions(legalActions);
+        std::vector<std::vector<Action_Rank>> player1AllActions;
+        game->getAllActions(1, player1AllActions);
+        EXPECT_THAT(legalActions, player1AllActions);
+    }
+}
+
+TEST(Game, getActionCards)
+{
+    std::unique_ptr<Game> game;
+    std::vector<std::unique_ptr<Action>> actionCards;
+
+    // no faceup cards
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "", "S3H3C3");
+    game->getActionCards(ACTION_TYPE_SOLO, 0, actionCards);
+    ASSERT_EQ(actionCards.size(), 1);
+    ASSERT_EQ(actionCards[0]->getActionData()->sum(), 1);
+    ASSERT_EQ(actionCards[0]->data()[0], 0); //S3
+    ASSERT_EQ(actionCards[0]->data()[1], 0); //H3
+    ASSERT_EQ(actionCards[0]->data()[2], 0); //C3
+    ASSERT_EQ((*actionCards[0]->getActionData())[3], 1);
+
+    game->getActionCards(ACTION_TYPE_PAIR, 0, actionCards);
+    ASSERT_EQ(actionCards.size(), 1);
+    Eigen::Array<CARD_ARRAY_DATA_TYPE, 1, 13> cards_13_1d = Eigen::Map<const Cards_52_2d_Type>(actionCards[0]->getActionData()->data()).colwise().sum();
+    ASSERT_EQ(cards_13_1d.sum(), 2);
+    ASSERT_EQ(cards_13_1d[0], 2);
+    ASSERT_EQ((*actionCards[0]->getActionData())[3], 1);
+
+    game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "", "D3D4D5");
+    game->getActionCards(ACTION_TYPE_SOLO, 0, actionCards);
+    ASSERT_EQ(actionCards.size(), 1);
+    cards_13_1d = Eigen::Map<const Cards_52_2d_Type>(actionCards[0]->getActionData()->data()).colwise().sum();
+    ASSERT_EQ(cards_13_1d.sum(), 1);
+    ASSERT_EQ(cards_13_1d[0], 1);
+    ASSERT_EQ(actionCards[0]->data()[3], 0); //D3
+    ASSERT_EQ(actionCards[0]->data()[7], 0); //D4
+    ASSERT_EQ(actionCards[0]->data()[11], 0); //D5
+
+    // ACTION_TYPE_TRIO_SOLO_CHAIN_X
+    game = createGame("S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDT", "", "", "");
+    game->getActionCards(ACTION_TYPE_TRIO_SOLO_CHAIN_4, 3, actionCards);
+    ASSERT_EQ(actionCards.size(), 1);
+    cards_13_1d = Eigen::Map<const Cards_52_2d_Type>(actionCards[0]->getActionData()->data()).colwise().sum();
+    ASSERT_EQ(cards_13_1d.sum(), s_actionTypeSumCards[ACTION_TYPE_TRIO_SOLO_CHAIN_4]);
+    ASSERT_EQ(cards_13_1d[2], 2);
+    ASSERT_EQ(cards_13_1d[7], 2);
+
+    // ACTION_TYPE_FOUR_TWO_PAIR
+    game = createGame("S3H3C3D3S4H4C4D4", "", "", "");
+    EXPECT_DEATH(game->getActionCards(ACTION_TYPE_FOUR_TWO_PAIR, 0, actionCards), ".*");
 }

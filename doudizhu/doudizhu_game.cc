@@ -146,9 +146,18 @@ bool Game::isValidAction(const Action & action)
             break;
         }
     case Action_Type::ACTION_TYPE_ROCKET:
-        return false;
+        if (actionType == Action_Type::ACTION_TYPE_PASS)
+        {
+            break;
+        }
+        else
+        {
+            return false;
+        }
     case Action_Type::ACTION_TYPE_BOMB:
-        if (actionType == Action_Type::ACTION_TYPE_ROCKET || (actionType == Action_Type::ACTION_TYPE_BOMB && actionRank > roundActionRank))
+        if (actionType == Action_Type::ACTION_TYPE_PASS 
+            || actionType == Action_Type::ACTION_TYPE_ROCKET 
+            || (actionType == Action_Type::ACTION_TYPE_BOMB && actionRank > roundActionRank))
         {
             break;
         }
@@ -171,7 +180,11 @@ bool Game::isValidAction(const Action & action)
     }
 
     //if all action cards are in player's hands
-    if ((_playerHands[_playerId] < Eigen::Map<const Cards_54_1d_Type>(action.data())).any())
+    if (actionType == Action_Type::ACTION_TYPE_PASS)
+    {
+        return true;
+    }
+    else if ((_playerHands[_playerId] < Eigen::Map<const Cards_54_1d_Type>(action.data())).any())
     {
         return false;
     }
@@ -787,7 +800,7 @@ void Game::getAllActions(int playerId, std::vector<std::vector<Action_Rank>> & r
 void Game::getLegalActions(std::vector<std::vector<Action_Rank>> & legalActions)
 {
     legalActions.clear();
-    legalActions.assign(38, std::vector<Action_Rank>());
+    legalActions.assign(ACTION_TYPE_SIZE, std::vector<Action_Rank>());
 
     if (isOver())
     {
@@ -920,7 +933,7 @@ void Game::getLegalActions(std::vector<std::vector<Action_Rank>> & legalActions)
             break;
         case ACTION_TYPE_ROCKET:
             // get_ROCKET_Actions(_playerId, roundRank + 1, legalActions[roundType]);
-            assert(false);
+            // assert(false);
             break;
         default:
             assert(false);
@@ -929,16 +942,204 @@ void Game::getLegalActions(std::vector<std::vector<Action_Rank>> & legalActions)
         legalActions[Action_Type::ACTION_TYPE_PASS].push_back(0);
         if (roundType != Action_Type::ACTION_TYPE_ROCKET)
         {
-            get_ROCKET_Actions(_playerId, 0, legalActions[roundType]);
+            get_ROCKET_Actions(_playerId, 0, legalActions[ACTION_TYPE_ROCKET]);
             if (roundType != Action_Type::ACTION_TYPE_BOMB)
             {
-                get_BOMB_Actions(_playerId, 0, legalActions[roundType]);
+                get_BOMB_Actions(_playerId, 0, legalActions[ACTION_TYPE_BOMB]);
             }
         }
     }
     else
     {
         getAllActions(_playerId, legalActions);
+    }
+}
+
+void Game::getActionCards(Action_Type type, Action_Rank rank, std::vector<std::unique_ptr<Action>> & actionCards)
+{
+    actionCards.clear();
+    
+    std::shared_ptr<ActionData> ad(new ActionData());
+    ad->setZero();
+    std::vector<std::shared_ptr<ActionData>> ads;
+
+    auto & playerCards = _playerHands[_playerId];
+
+    switch(type)
+    {
+    case ACTION_TYPE_SOLO:
+        get_SOLO_ActionCards(playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_5:
+        get_TYPEX_CHAINX_ActionCards(1, 5, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_6:
+        get_TYPEX_CHAINX_ActionCards(1, 6, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_7:
+        get_TYPEX_CHAINX_ActionCards(1, 7, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_8:
+        get_TYPEX_CHAINX_ActionCards(1, 8, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_9:
+        get_TYPEX_CHAINX_ActionCards(1, 9, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_10:
+        get_TYPEX_CHAINX_ActionCards(1, 10, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_11:
+        get_TYPEX_CHAINX_ActionCards(1, 11, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_SOLO_CHAIN_12:
+        get_TYPEX_CHAINX_ActionCards(1, 12, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR:
+        get_TYPEX_CHAINX_ActionCards(2, 1, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_3:
+        get_TYPEX_CHAINX_ActionCards(2, 3, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_4:
+        get_TYPEX_CHAINX_ActionCards(2, 4, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_5:
+        get_TYPEX_CHAINX_ActionCards(2, 5, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_6:
+        get_TYPEX_CHAINX_ActionCards(2, 6, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_7:
+        get_TYPEX_CHAINX_ActionCards(2, 7, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_8:
+        get_TYPEX_CHAINX_ActionCards(2, 8, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_9:
+        get_TYPEX_CHAINX_ActionCards(2, 9, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_PAIR_CHAIN_10:
+        get_TYPEX_CHAINX_ActionCards(2, 10, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO:
+        get_TYPEX_CHAINX_ActionCards(3, 1, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_CHAIN_2:
+        get_TYPEX_CHAINX_ActionCards(3, 2, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_CHAIN_3:
+        get_TYPEX_CHAINX_ActionCards(3, 3, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_CHAIN_4:
+        get_TYPEX_CHAINX_ActionCards(3, 4, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_CHAIN_5:
+        get_TYPEX_CHAINX_ActionCards(3, 5, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_CHAIN_6:
+        get_TYPEX_CHAINX_ActionCards(3, 6, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_TRIO_SOLO:
+        get_TYPEX_CHAINX_ActionCards(3, 1, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 1, -1, -1, ads);
+        break;
+    case ACTION_TYPE_TRIO_SOLO_CHAIN_2:
+        get_TYPEX_CHAINX_ActionCards(3, 2, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 2, -1, -1, ads);
+        break;
+    case ACTION_TYPE_TRIO_SOLO_CHAIN_3:
+        get_TYPEX_CHAINX_ActionCards(3, 3, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 3, rank - 1, rank + 3 < 12 ? rank + 3 : -1, ads);
+        break;
+    case ACTION_TYPE_TRIO_SOLO_CHAIN_4:
+        get_TYPEX_CHAINX_ActionCards(3, 4, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 4, rank - 1, rank + 4 < 12 ? rank + 4 : -1, ads);
+        break;
+    case ACTION_TYPE_TRIO_SOLO_CHAIN_5:
+        get_TYPEX_CHAINX_ActionCards(3, 5, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 5, rank - 1, rank + 5 < 12 ? rank + 5 : -1, ads);
+        break;
+    case ACTION_TYPE_TRIO_PAIR:
+        get_TYPEX_CHAINX_ActionCards(3, 1, playerCards, rank, ad);
+        get_PAIR_AttachmentCards(playerCards, ad, 1, ads);
+        break;
+    case ACTION_TYPE_TRIO_PAIR_CHAIN_2:
+        get_TYPEX_CHAINX_ActionCards(3, 2, playerCards, rank, ad);
+        get_PAIR_AttachmentCards(playerCards, ad, 2, ads);
+        break;
+    case ACTION_TYPE_TRIO_PAIR_CHAIN_3:
+        get_TYPEX_CHAINX_ActionCards(3, 3, playerCards, rank, ad);
+        get_PAIR_AttachmentCards(playerCards, ad, 3, ads);
+        break;
+    case ACTION_TYPE_TRIO_PAIR_CHAIN_4:
+        get_TYPEX_CHAINX_ActionCards(3, 4, playerCards, rank, ad);
+        get_PAIR_AttachmentCards(playerCards, ad, 4, ads);
+        break;
+    case ACTION_TYPE_FOUR_TWO_SOLO:
+        get_TYPEX_CHAINX_ActionCards(4, 1, playerCards, rank, ad);
+        get_SOLO_AttachmentCards(playerCards, ad, 2, -1, -1, ads);
+        break;
+    case ACTION_TYPE_FOUR_TWO_PAIR:
+        get_TYPEX_CHAINX_ActionCards(4, 1, playerCards, rank, ad);
+        get_PAIR_AttachmentCards(playerCards, ad, 2, ads);
+        break;
+    case ACTION_TYPE_BOMB:
+        get_TYPEX_CHAINX_ActionCards(4, 1, playerCards, rank, ad);
+        break;
+    case ACTION_TYPE_ROCKET:
+        get_ROCKET_ActionCards(playerCards, rank, ad);
+        assert(false);
+        break;
+    case ACTION_TYPE_PASS:
+        get_PASS_ActionCards(playerCards, rank, ad);
+        break;
+    default:
+        assert(false);
+    }
+
+    if (ads.empty())
+    {
+        ads.push_back(ad);
+    }
+
+    if (_playerId == Game::LAND_LORD_PLAYER_ID)
+    {
+        const auto faceupCards = _gameCards.row(FACEUP_CARDS_ROW);
+        for (int i = 0; i < 54; i++)
+        {
+            if (faceupCards[i] == 1)
+            {
+                if (i >= 52)
+                {
+                    continue;
+                }
+                
+                for (auto pActionData : ads)
+                {
+                    if ((*pActionData)[i])
+                    {
+                        for (int j = i / 4 * 4; j < i / 4 * 4 + 4; j++)
+                        {
+                            if (j == i)
+                            {
+                                continue;
+                            }
+                            if (playerCards[j] && !faceupCards[j] && !(*pActionData)[j])
+                            {
+                                (*pActionData)[j] = 1;
+                                (*pActionData)[i] = 0;
+                                break;
+                            } 
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (auto pActionData : ads)
+    {
+        actionCards.push_back(std::unique_ptr<Action>(new Action(pActionData, type, rank)));
     }
 }
 

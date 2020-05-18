@@ -17,24 +17,30 @@
     // landlord (player 0) has Spade 4 and Red Joker
     // player 1 has Spade 3 and Diamond A
     // player 2 has Diamond 2
+    // faceup cards are S3S4S5
     // next player id is currPlayerId
     // action history is historyActions
     Cards_54_1d_Type cards;
     GameCards gameCards(GameCards::Zero());
 
-    gameCards.row(4) = Cards_54_1d_Type::Ones();
+    gameCards.row(PUBLIC_CARDS_ROW) = Cards_54_1d_Type::Ones();
 
-    cardsFromString("S4JR", landlordCards);
-    gameCards.row(0) += cards;
-    gameCards.row(4) -= cards;
+    cardsFromString(cards, "S4JR");
+    gameCards.row(LANDLORD_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
 
-    cardsFromString("S3DA", player1Cards);
-    gameCards.row(1) += cards;
-    gameCards.row(4) -= cards;
+    cardsFromString(cards, "S3DA");
+    gameCards.row(PLAYER_1_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
 
-    cardsFromString("D2", player2Cards);
-    gameCards.row(2) += cards;
-    gameCards.row(4) -= cards;
+    cardsFromString(cards, "D2");
+    gameCards.row(PLAYER_2_CARDS_ROW) += cards;
+    gameCards.row(PUBLIC_CARDS_ROW) -= cards;
+
+    cardsFromString(cards, "S3S4S5");
+    gameCards.row(FACEUP_CARDS_ROW) += cards;
+
+    // setup historyActions ...
 
     std::unique_ptr<Game> game(new Game(currPlayerId, gameCards, historyActions));
 ```
@@ -58,7 +64,7 @@
 ## Play back
 
 ```cpp
-    bool result = game->playback();
+    bool result = game->playBack();
 ```
 
 ## Get game status
@@ -79,5 +85,29 @@
 
     // get payoff
     Game::Payoff payoff;
-    bool result = game->getPayoff(payoff);
+    result = game->getPayoff(payoff);
+```
+
+## Get current player's all legal actions for play
+
+```cpp
+    std::vector<std::vector<Action_Rank>> legalGameTypeAndRanks;
+    // get all legal action type and ranks
+    game->getLegalActions(legalGameTypeAndRanks);
+    for (int type = 0; type < ACTION_TYPE_SIZE; ++type)
+    {
+        auto ranks = legalGameTypeAndRanks[type];
+        if (!ranks.empty())
+        {
+            for (Action_Rank rank : ranks)
+            {
+                // get actions of the type and rank
+                std::vector<std::unique_ptr<Action>> actions;
+                game->getActionCards(Action_Type(type), rank, actions);
+
+                // user can play some action now
+                // game->play(actions[i]);
+            }
+        }
+    }
 ```

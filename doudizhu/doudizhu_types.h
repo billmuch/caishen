@@ -62,6 +62,11 @@ typedef Eigen::Array<CARD_ARRAY_DATA_TYPE, 4, 13> Cards_52_2d_Type;
  * 
  */
 typedef Eigen::Array<CARD_ARRAY_DATA_TYPE, 5, 54, Eigen::RowMajor> GameCards;
+#define LANDLORD_CARDS_ROW  0
+#define PLAYER_1_CARDS_ROW  1
+#define PLAYER_2_CARDS_ROW  2
+#define FACEUP_CARDS_ROW    3
+#define PUBLIC_CARDS_ROW    4
 
 } // namespace doudizhu
 } // namespace caishen

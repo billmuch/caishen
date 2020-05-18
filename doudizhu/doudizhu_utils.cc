@@ -1,6 +1,8 @@
 #include "doudizhu_utils.h"
 #include "doudizhu_action.h"
 
+#include <algorithm>
+#include <random>
 #include <unordered_map>
 
 namespace caishen
@@ -95,7 +97,6 @@ bool isValidActionTypeAndRank(const std::shared_ptr<const ActionData> &pActionDa
         }
     }
 
-    // TODO: use Game::_cachedPlayerHandsByRank instead of colSum
     auto colSum = Eigen::Map<const Cards_52_2d_Type>(pActionData->data()).colwise().sum();
 
     switch (type)
@@ -200,6 +201,16 @@ bool isValidActionTypeAndRank(const std::shared_ptr<const ActionData> &pActionDa
     return false;
 }
 
+std::array<int, 4> & chooseCardOrder()
+{
+    static std::default_random_engine g(time(0));
+    static std::array<int, 4> order({0, 1, 2, 3});
+
+    std::shuffle(std::begin(order), std::end(order), g);
+
+    return  order;
+}
+
 void get_SOLO_ActionCards(const Cards_54_1d_Type &playerCards, Action_Rank rank, std::shared_ptr<ActionData> &pActionData)
 {
     if (rank == 13 || rank == 14)
@@ -209,11 +220,12 @@ void get_SOLO_ActionCards(const Cards_54_1d_Type &playerCards, Action_Rank rank,
     }
     else
     {
-        for (int i = rank * 4; i < rank * 4 + 4; i++)
+        auto base = rank * 4;
+        for (auto i : chooseCardOrder())
         {
-            if (playerCards[i])
+            if (playerCards[base + i])
             {
-                (*pActionData)[i] = 1;
+                (*pActionData)[base + i] = 1;
                 return;
             }
         }
@@ -226,11 +238,14 @@ void get_TYPEX_CHAINX_ActionCards(int TX, int CX, const Cards_54_1d_Type &player
     for (int r = rank; r < rank + CX; r++)
     {
         int selected = 0;
-        for (int i = 0; i < 4; i++)
+
+        auto base = r * 4;
+        auto & order = chooseCardOrder();
+        for (auto i : order)
         {
-            if (playerCards[r * 4 + i])
+            if (playerCards[base + i])
             {
-                (*pActionData)[r * 4 + i] = 1;
+                (*pActionData)[base + i] = 1;
                 if (++selected == TX)
                 {
                     break;
@@ -421,7 +436,7 @@ void get_SOLO_AttachmentCards(const Cards_54_1d_Type &playerCards, const std::sh
         if (cards_13_1d[i] == 4)
         {
             cards_13_1d[i] -= 1;
-            for (int j = i * 4; j < i * 4 + 1; j++)
+            for (int j = i * 4; j < i * 4 + 4; j++)
             {
                 if (cards_54_1d[j])
                 {
@@ -437,7 +452,7 @@ void get_SOLO_AttachmentCards(const Cards_54_1d_Type &playerCards, const std::sh
             if (cards_13_1d[i] == 3)
             {
                 cards_13_1d[i] -= 1;
-                for (int j = i * 4; j < i * 4 + 1; j++)
+                for (int j = i * 4; j < i * 4 + 4; j++)
                 {
                     if (cards_54_1d[j])
                     {
@@ -452,7 +467,7 @@ void get_SOLO_AttachmentCards(const Cards_54_1d_Type &playerCards, const std::sh
         if (action_cards_13_1d[i])
         {
             cards_13_1d[i] -= 1;
-            for (int j = i * 4; j < i * 4 + 1; j++)
+            for (int j = i * 4; j < i * 4 + 4; j++)
             {
                 if (cards_54_1d[j])
                 {
