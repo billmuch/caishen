@@ -79,7 +79,7 @@ typedef std::pair<Action_Type, Action_Rank> ActionDetails;
  * Also see @ref Cards_54_1d_Type. 
  * 
  */
-typedef Eigen::Matrix<CARD_ARRAY_DATA_TYPE, 1, 55> ActionData;
+typedef Eigen::Array<CARD_ARRAY_DATA_TYPE, 1, 55> ActionData;
 
 /**
  * @brief Action class hold the action data and it's type and rank
@@ -112,7 +112,7 @@ private:
 
 inline bool operator==(const Action &la, const Action &ra)
 {
-    return ((la._details == ra._details) && (*la._pActionData) == (*ra._pActionData));
+    return ((la._details == ra._details) && ((*la._pActionData) == (*ra._pActionData)).all());// (*la._pActionData) == (*ra._pActionData)));
 }
 
 inline bool operator!=(const Action &la, const Action &ra)
