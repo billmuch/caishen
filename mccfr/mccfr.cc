@@ -67,10 +67,20 @@ int getSubActionsSampleTimes(std::vector<double> &probs)
     return (int)(probs.size() * .75);
 }
 
+void InformationSet::init(const AbstractActionSpace & legalActions)
+{
+    cumulativeRegrets.setZero();
+    cumulativePolicy.setZero();
+    
+    legalActionMask = legalActions.cast<bool>();
+    uniformDistConstant = 1.0 / (legalActionMask == true).count();
+
+    applyRegretMatching();
+}
 
 void InformationSet::applyRegretMatching()
 {
-    currentPolicy = (cumulativeRegrets < 0).select(0, cumulativeRegrets);
+    currentPolicy = (cumulativeRegrets < 0).select(0.0, cumulativeRegrets);
     double sum = currentPolicy.sum();
     if (sum > 0)
     {
@@ -78,7 +88,8 @@ void InformationSet::applyRegretMatching()
     }
     else
     {
-        currentPolicy.setConstant(1.0/cumulativeRegrets.rows());
+        currentPolicy = legalActionMask.cast<double>();
+        currentPolicy = (legalActionMask == true).select(uniformDistConstant, currentPolicy);
     }
 }
 
@@ -91,7 +102,8 @@ void InformationSet::getAverageStrategy(Eigen::Ref<Eigen::Array<double, Eigen::D
     }
     else
     {
-        averageStrategy.setConstant(1.0/cumulativePolicy.rows());
+        averageStrategy = legalActionMask.cast<double>();
+        averageStrategy = (legalActionMask == true).select(uniformDistConstant, averageStrategy);
     }
 }
 

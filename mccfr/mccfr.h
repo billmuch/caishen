@@ -16,6 +16,8 @@ typedef Eigen::Array<char, 1, Eigen::Dynamic> AbstractActionSpace;
 struct InformationSet
 {
 public:
+    Eigen::Array<bool, Eigen::Dynamic, 1> legalActionMask;
+    double uniformDistConstant;
     Eigen::Array<double, Eigen::Dynamic, 1> cumulativeRegrets;
     Eigen::Array<double, Eigen::Dynamic, 1> cumulativePolicy;
     Eigen::Array<double, Eigen::Dynamic, 1> currentPolicy;
@@ -23,12 +25,14 @@ public:
 public:
     InformationSet() {}
     InformationSet(int RESERVED_SIZE)
-        : cumulativeRegrets(RESERVED_SIZE),
+        : legalActionMask(RESERVED_SIZE),
+          cumulativeRegrets(RESERVED_SIZE),
           cumulativePolicy(RESERVED_SIZE),
           currentPolicy(RESERVED_SIZE)
     {
     }
 
+    void init(const AbstractActionSpace & legalActions);
     int getActionSize();
     void applyRegretMatching();
     void getAverageStrategy(Eigen::Ref<Eigen::Array<double, Eigen::Dynamic, 1>> averageStrategy);
@@ -42,8 +46,7 @@ int getSubActionsSampleTimes(std::vector<double> &probs);
 int sampleSubActions(std::vector<double> &probs);
 template<typename Game, typename Action, typename ActionsProbabilities> void getSubActionsProbabilities(Game &game, std::vector<std::unique_ptr<Action>> &actions, std::vector<double> &probs)
 {
-    ActionsProbabilities ap(game, actions);
-    ap.getProbabilities(probs);
+    ActionsProbabilities::getProbabilities(game, actions, probs);
 }
 
 /**
@@ -77,12 +80,18 @@ double mccfr(InformationSetStore &iss, Game &game,
         return payoff[updatePlayerId];
     }
 
-    InformationSet is;
-    std::unique_ptr<const std::string> pKey = getInformationSetKey(game);
-    iss.getInformationSet(*pKey, is);
+    InformationSet is(InformationSetStore::ABSTRACT_ACTION_SIZE);
+    auto pKey = iss.getInformationSetKey(game);
+    if (!iss.contains(*pKey))
+    {
+        AbstractActionSpace legalActions(is.getActionSize());
+        pCurrPlayer->getLegalAbstractActions(game, legalActions);
 
-    AbstractActionSpace legalActions(is.getActionSize());
-    pCurrPlayer->getLegalAbstractActions(game, legalActions);
+        is.init(legalActions);
+        
+        iss.putInformationSet(*pKey, is);
+    }
+    iss.getInformationSet(*pKey, is);
 
     double util = 0.0;
     if (currPlayerId != updatePlayerId)
@@ -111,10 +120,10 @@ double mccfr(InformationSetStore &iss, Game &game,
     else
     {
         // travers over my nodes
-        Eigen::Array<double, Eigen::Dynamic, 1> utils(legalActions.cols());
-        for (int i = 0; i < legalActions.cols(); i++)
+        Eigen::Array<double, Eigen::Dynamic, 1> utils(is.legalActionMask.rows());
+        for (int i = 0; i < is.legalActionMask.rows(); i++)
         {
-            if (legalActions[i])
+            if (is.legalActionMask[i])
             {
                 std::vector<std::unique_ptr<Action>> actions;
                 pCurrPlayer->abstractAction2ActionCards(game, i, actions);

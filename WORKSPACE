@@ -28,3 +28,12 @@ http_archive(
         "https://github.com/google/googletest/archive/b6cd405286ed8635ece71c72f118e659f4ade3fb.zip",
     ],
 )
+
+http_archive(
+    name = "spdlog",
+    build_file = "//third_party:spdlog.BUILD",
+    urls = ["https://github.com/cgrinker/spdlog/archive/3bf4a07dc286e10fa32d6503fded647c9ee02d26.zip"],
+    strip_prefix = "spdlog-3bf4a07dc286e10fa32d6503fded647c9ee02d26",
+    sha256 = "d00ccd202e2abae832441b9121330a4b8b82fdc60564edb315c89506fa3772c3",
+)
+

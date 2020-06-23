@@ -11,13 +11,6 @@ namespace caishen
 namespace cfr
 {
 
-class InformationSetStore
-{
-public:
-    virtual void getInformationSet(const std::string &key, InformationSet &is) = 0;
-    virtual void putInformationSet(const std::string &key, InformationSet &is) = 0;
-};
-
 class CFRDoudizhuPlayer
 {
 public:

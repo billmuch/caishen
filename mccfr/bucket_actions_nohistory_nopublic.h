@@ -12,11 +12,6 @@
  *          4. abstractAction组合 + 2个对家的手牌数量 + 当前回合中最大的action + public牌数 + public中的大牌（JQKA2等及4张全出完的rank）
  *          5. abstractAction组合 + 两个对家少于5张手牌时的具体手牌数量 + 当前回合中最大的action + public牌数 + public中的大牌（JQKA2等及4张全出完的rank）
  * 
- * @version 0.1
- * @date 2020-03-25
- * 
- * @copyright Copyright (c) 2020
- * 
  */
 
 #include "doudizhu/doudizhu_game.h"
@@ -28,8 +23,6 @@ namespace caishen
 {
 namespace cfr
 {
-
-#define ABSTRACT_ACTION_SIZE    309
 
 enum AbstractAction
 {
@@ -344,19 +337,75 @@ enum AbstractAction
     AA_PASS
 };
 
-typedef Eigen::Array<char, 1, ABSTRACT_ACTION_SIZE> BucketAbstractActionSpace;
-
-class BANHNPInformationSetStore : public InformationSetStore
+class BANHNPInformationSetKey
 {
-    virtual void getInformationSet(const std::string & key, InformationSet & is) override;
-    virtual void putInformationSet(const std::string & key, InformationSet & is) override;
+public: 
+    typedef std::array<unsigned char, 34> KeyDataType;
+
+public:
+    BANHNPInformationSetKey(const caishen::doudizhu::Game & game);
+    BANHNPInformationSetKey(const KeyDataType & keyData);
+    
+    virtual ~BANHNPInformationSetKey() {};
+
+    bool operator<(const BANHNPInformationSetKey& key) const;
+
+    virtual std::string str();
+
+    const KeyDataType & data() const;
+
+private:
+    // 当前用户id, 1byte
+    // 当前用户手牌，7bytes
+    // 其余两个玩家手牌数量，2bytes
+    // faceup 3张牌，3bytes，
+    // public，7bytes
+    // 最近2次history, 2*7bytes
+    std::array<unsigned char, 34> _data;
+
+private:
+    static void cards2ByteArray(const Eigen::Array<caishen::doudizhu::CARD_ARRAY_DATA_TYPE, 1, 54> & cards, unsigned char * bytes);
+    static void outputCards(std::ostream &strm, unsigned char * cardsInBytes);
+};
+
+struct BANHNPInformationSetKeyWrapper
+{
+    BANHNPInformationSetKeyWrapper(const BANHNPInformationSetKey & key) : _pKey(new BANHNPInformationSetKey(key)) {}
+    BANHNPInformationSetKeyWrapper(const BANHNPInformationSetKey::KeyDataType & keyData) : _pKey(new BANHNPInformationSetKey(keyData)) {}
+    BANHNPInformationSetKeyWrapper(const BANHNPInformationSetKeyWrapper & keyWrapper) : _pKey(keyWrapper._pKey) {}
+    BANHNPInformationSetKeyWrapper(const std::shared_ptr<BANHNPInformationSetKey> & pKeyWrapper) : _pKey(pKeyWrapper) {}
+
+    std::shared_ptr<BANHNPInformationSetKey> _pKey;
+
+    bool operator<(const BANHNPInformationSetKeyWrapper& other) const
+    {
+        return *(_pKey) < *(other._pKey);
+    }
+};
+
+struct BANHNPInformationSet : public BANHNPInformationSetKeyWrapper
+{
+    BANHNPInformationSet(const BANHNPInformationSetKeyWrapper & keyWrapper, const std::shared_ptr<InformationSet> &pis)
+        :BANHNPInformationSetKeyWrapper(keyWrapper), _pIs(pis)
+    {}
+
+    BANHNPInformationSet(const BANHNPInformationSet & banhnpInformationSet)
+        :BANHNPInformationSetKeyWrapper(banhnpInformationSet._pKey), _pIs(banhnpInformationSet._pIs)
+    {}
+
+    std::shared_ptr<InformationSet> _pIs;
+};
+
+class UniformDistributionActionsProbabilities
+{
+public:
+    static void getProbabilities(const caishen::doudizhu::Game &game, const std::vector<std::unique_ptr<caishen::doudizhu::Action>> &actions, std::vector<double> &probs);
+private:
+    UniformDistributionActionsProbabilities(const caishen::doudizhu::Game &game, const std::vector<std::unique_ptr<caishen::doudizhu::Action>> &actions);
 };
 
 class BANHNPPlayer : public CFRDoudizhuPlayer
 {
-public:
-    static std::unique_ptr<const std::string> getInformationSetKey(caishen::doudizhu::Game& game);
-
 public:
     BANHNPPlayer(int playerId);
     virtual ~BANHNPPlayer() override;

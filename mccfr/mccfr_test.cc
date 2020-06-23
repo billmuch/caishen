@@ -1,5 +1,8 @@
 #include "gtest/gtest.h"
 #include "mccfr.h"
+#include "doudizhu/doudizhu_game.h"
+#include "doudizhu/doudizhu_utils.h"
+#include "bucket_actions_nohistory_nopublic.h"
 #include <sstream>
 #include <bits/stdc++.h>
 
@@ -9,6 +12,7 @@ namespace cfr {
 namespace {
 
 using namespace caishen::cfr;
+using namespace caishen::doudizhu;
 
 class KuhnPokerAction
 {
@@ -130,20 +134,24 @@ class KuhnPokerActionsProbabilities
 {
 public:
     KuhnPokerActionsProbabilities(KuhnPokerGame &game, std::vector<std::unique_ptr<KuhnPokerAction>> &actions){}
-    void getProbabilities(std::vector<double> &probs)
+    static void getProbabilities(const KuhnPokerGame &game, const std::vector<std::unique_ptr<KuhnPokerAction>> &actions, std::vector<double> &probs)
     {
         //this function should not be called
         assert(false);
     }
 };
 
-std::unique_ptr<const std::string> getInformationSetKey(KuhnPokerGame& game)
-{
-    return std::unique_ptr<const std::string>(new std::string(game.getPlayerCard() + game.getHistory()));
-}
-
 class KuhnPokerInformationSetStore
 {
+public:
+    static const int ABSTRACT_ACTION_SIZE = 2;
+
+public:
+    static std::unique_ptr<const std::string> getInformationSetKey(KuhnPokerGame& game)
+    {
+        return std::unique_ptr<const std::string>(new std::string(game.getPlayerCard() + game.getHistory()));
+    }
+
 public:
     void getInformationSet(const std::string & key, InformationSet & is)
     {
@@ -164,6 +172,8 @@ public:
         is.applyRegretMatching();
     }
 
+    bool contains(const std::string & key) { return _iss.find(key) != _iss.end(); }
+    
     void putInformationSet(const std::string & key, InformationSet & is)
     {
         _iss[key] = is;

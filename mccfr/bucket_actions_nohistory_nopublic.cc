@@ -1,5 +1,10 @@
 #include "bucket_actions_nohistory_nopublic.h"
 #include "doudizhu/doudizhu_utils.h"
+#include "mem_informationset_store.h"
+
+#include <iostream>
+#include <string>
+#include <algorithm>
 
 namespace caishen
 {
@@ -8,6 +13,170 @@ namespace cfr
 
 using namespace caishen::doudizhu;
 
+void BANHNPInformationSetKey::cards2ByteArray(const Eigen::Array<CARD_ARRAY_DATA_TYPE, 1, 54> & cards, unsigned char * bytes)
+{
+    for (int i = 0; i < 7; ++i)
+    {
+        bytes[i] = 0;
+    }
+
+    for (int i = 0; i < 54; ++i)
+    {
+        if (cards[i])
+        {
+            bytes[i/8] |= (1 << (i % 8));
+        }
+    }
+}
+
+BANHNPInformationSetKey::BANHNPInformationSetKey(const KeyDataType & keyData)
+    : _data(keyData)
+{
+
+}
+
+BANHNPInformationSetKey::BANHNPInformationSetKey(const caishen::doudizhu::Game & game)
+{
+    int currPlayerId = game.getPlayerId();
+
+    _data[0] = static_cast<unsigned char>(currPlayerId);
+
+    // 当前用户手牌 _data[1-7]
+    cards2ByteArray(game.getCards().row(currPlayerId), _data.data() + 1);
+
+    // 下个用户手牌数量_data[8]
+    int nextPlayerId = (currPlayerId + 1)%3;
+    _data[8] = static_cast<unsigned char>(game.getCards().row(nextPlayerId).sum());
+
+    // 下下个用户手牌数量_data[9]
+    nextPlayerId = (nextPlayerId + 1)%3;
+    _data[9] = static_cast<unsigned char>(game.getCards().row(nextPlayerId).sum());
+
+    // faceup _data[10-12]
+    auto faceup = game.getCards().row(FACEUP_CARDS_ROW);
+    int index = 10;
+    for (int i = 0; i < 54; ++i)
+    {
+        if (faceup[i])
+        {
+            _data[index++] = i;
+        }
+    }
+    assert(index == 13);
+
+    // public _data[13-19]
+    cards2ByteArray(game.getCards().row(PUBLIC_CARDS_ROW), _data.data() + 13);
+
+    // history[-1] _data[20-26]
+    auto & history = game.getHistory();
+    if (!history.empty())
+    {
+        auto r = history.back();
+        if (r.getDetails().first == Action_Type::ACTION_TYPE_PASS)
+        {
+            _data[26] |= (1 << 6);
+        }
+        else
+        {
+            cards2ByteArray(Eigen::Map<const Eigen::Array<CARD_ARRAY_DATA_TYPE, 1, 54>>(r.data()), _data.data() + 20);
+        }
+    }
+
+    // history[-2] _data[27-33]
+    if (history.size() > 1)
+    {
+        auto r = history[history.size() - 2];
+        if (r.getDetails().first == Action_Type::ACTION_TYPE_PASS)
+        {
+            _data[33] |= (1 << 6);
+        }
+        else
+        {
+            cards2ByteArray(Eigen::Map<const Eigen::Array<CARD_ARRAY_DATA_TYPE, 1, 54>>(r.data()), _data.data() + 27);
+        }
+    }
+}
+
+bool BANHNPInformationSetKey::operator<(const BANHNPInformationSetKey& key) const
+{
+    return memcmp(_data.data(), key.data().data(), 34) < 0;
+}
+
+void BANHNPInformationSetKey::outputCards(std::ostream &strm, unsigned char * cardsInBytes)
+{
+    for (int i = 0; i < 54; i++)
+    {
+        if ( (cardsInBytes[i/8] & (1 << i % 8)) ) {
+            strm << Deck::STANDARD_DECK[i];
+        }
+    }
+}
+
+std::string BANHNPInformationSetKey::str()
+{
+    std::ostringstream ostr;
+
+    int currPlayerId = _data[0];
+
+    // 当前用户手牌
+    ostr << "P" << currPlayerId << "<";
+    outputCards(ostr, _data.data() + 1);
+    ostr << ">";
+
+    // + 其余两个玩家的手牌数量
+    int nextPlayerId = (currPlayerId + 1)%3;
+    ostr << "P" << nextPlayerId << "<" << static_cast<int>(_data[8]) << ">";
+    
+    nextPlayerId = (nextPlayerId + 1)%3;
+    ostr << "P" << nextPlayerId << "<" << static_cast<int>(_data[9]) << ">";
+
+    // + FACEUP
+    ostr << "FACEUP<" << Deck::STANDARD_DECK[_data[10]] << Deck::STANDARD_DECK[_data[11]] << Deck::STANDARD_DECK[_data[12]] << ">";
+
+    // + PUBLIC
+    ostr << "PUBLIC<";
+    outputCards(ostr, _data.data() + 13);
+    ostr << ">";
+
+    // + 最近两次的history
+    ostr << "H(-1)<";
+    if ( (_data[26] & (1 << 6)) )
+    {
+        ostr << "PASS>";
+    }
+    else
+    {
+        outputCards(ostr, _data.data() + 20);
+        ostr << ">";
+    }
+
+    ostr << "H(-2)<";
+    if ( (_data[33] & (1 << 6)) )
+    {
+        ostr << "PASS>";
+    }
+    else
+    {
+        outputCards(ostr, _data.data() + 27);
+        ostr << ">";
+    }
+
+    return ostr.str();
+}
+
+const BANHNPInformationSetKey::KeyDataType & BANHNPInformationSetKey::data() const
+{
+    return _data;
+}
+
+void UniformDistributionActionsProbabilities::getProbabilities(const caishen::doudizhu::Game &game, const std::vector<std::unique_ptr<caishen::doudizhu::Action>> &actions, std::vector<double> &probs)
+{
+    probs.clear();
+    int size = actions.size();
+    assert(size != 0);
+    probs.assign(size, 1.0/size);
+}
+
 BANHNPPlayer::BANHNPPlayer(int playerId)
     : CFRDoudizhuPlayer(playerId)
 {
@@ -15,17 +184,6 @@ BANHNPPlayer::BANHNPPlayer(int playerId)
 
 BANHNPPlayer::~BANHNPPlayer()
 {
-}
-
-/**
- * @brief 根据game的state，和InformationSet的抽象算法，计算出AbstractInformationSet的key
- * 
- * @param game 
- * @return std::unique_ptr<const std::string> 
- */
-std::unique_ptr<const std::string> BANHNPPlayer::getInformationSetKey(caishen::doudizhu::Game& game)
-{
-    return std::unique_ptr<std::string>(new std::string(""));
 }
 
 void BANHNPPlayer::action2AbstractAction(Action_Type aType, std::vector<Action_Rank> &availableRanks, Eigen::Ref<AbstractActionSpace> legalActions)
@@ -291,6 +449,13 @@ void BANHNPPlayer::action2AbstractAction(Action_Type aType, std::vector<Action_R
             legalActions[r + AA_ROCKET_RANK_0] = 1;
         }
         return;
+    case ACTION_TYPE_PASS:
+        for (Action_Rank r : availableRanks)
+        {
+            assert(r == 0);
+            legalActions[r + AA_PASS] = 1;
+        }
+        return;
     default:
         assert(false);
     }
@@ -316,10 +481,6 @@ void BANHNPPlayer::abstractAction2ActionCards(Game &game, int abstractActionId, 
     Action_Type type;
     Action_Rank rank;
     std::vector<Action_Rank> availableRanks;
-
-    int currPlayerId = game.getPlayerId();
-
-    auto playerCards = game.getCards().row(currPlayerId);
 
     assert(abstractActionId >= AA_SOLO_RANK_0 && abstractActionId <= AA_PASS);
     switch(abstractActionId)
@@ -756,7 +917,13 @@ void BANHNPPlayer::abstractAction2ActionCards(Game &game, int abstractActionId, 
 
 int BANHNPPlayer::pickAbstractAction(Game &game)
 {
-    return 0;
+    auto piss = MemoryInformationSetStore::getInstance();
+    InformationSet is(MemoryInformationSetStore::ABSTRACT_ACTION_SIZE);
+    piss->getInformationSet(*(piss->getInformationSetKey(game)), is);
+
+    auto i = std::max_element(is.currentPolicy.data(), is.currentPolicy.data() + is.cumulativePolicy.size());
+
+    return i - is.currentPolicy.data();
 }
 
 } // namespace cfr
