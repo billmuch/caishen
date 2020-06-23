@@ -91,21 +91,21 @@ public:
      * 
      * @return const int playerId
      */
-    inline const int getPlayerId() { return _playerId; }
+    inline const int getPlayerId() const { return _playerId; }
 
     /**
      * @brief Get the current game cards (each players cards, public cards and 3 face up cards)
      * 
      * @return const GameCards& game cards
      */
-    inline const GameCards &getCards() { return _gameCards; }
+    inline const GameCards &getCards() const { return _gameCards; }
 
     /**
      * @brief Get the history 
      * 
      * @return const HistoryActions& 
      */
-    inline const HistoryActions &getHistory() { return _history; }
+    inline const HistoryActions &getHistory() const { return _history; }
 
     /**
      * @brief Get current player's all legal actions
@@ -261,13 +261,13 @@ public:
      
      */
     /**
-     * @brief Get all action type and all ranks the player[playerId]'s hand can play
+     * @brief Get all action type (but PASS) and all ranks the player[playerId]'s hand can play
      * 
      * @param playerId 
      * @param [out] actionRanks 2 dimention vector, actionRanks[actionType] is all ranks the player[playerId]'s hand can play
      * for the action type actionType. It will be an empty vector if the player can not play the actionType action
      */
-    void getAllActions(int playerId, std::vector<std::vector<Action_Rank>> & actionRanks);
+    void getAllActionsButPass(int playerId, std::vector<std::vector<Action_Rank>> & actionRanks);
 
 private:
     Game(bool isTrain = false);
