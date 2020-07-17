@@ -639,7 +639,7 @@ void Game::get_ROCKET_Actions(int playerId, Action_Rank startRank, std::vector<A
     }
 }
 
-void Game::getAllActions(int playerId, std::vector<std::vector<Action_Rank>> & ranks)
+void Game::getAllActionsButPass(int playerId, std::vector<std::vector<Action_Rank>> & ranks)
 {
      ranks.clear();
 
@@ -653,8 +653,8 @@ void Game::getAllActions(int playerId, std::vector<std::vector<Action_Rank>> & r
 
     int sum = _cachedPlayerHandsByRank[playerId].sum();
 
-    //PASS
-    ranks[ACTION_TYPE_PASS].push_back(0);
+    // PASS
+    // ranks[ACTION_TYPE_PASS].push_back(0);
 
     //ROCKET
     if (_cachedPlayerHandsByRank[playerId][13] && _cachedPlayerHandsByRank[playerId][14])
@@ -959,7 +959,7 @@ void Game::getLegalActions(std::vector<std::vector<Action_Rank>> & legalActions)
     }
     else
     {
-        getAllActions(_playerId, legalActions);
+        getAllActionsButPass(_playerId, legalActions);
     }
 }
 

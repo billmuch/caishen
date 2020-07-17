@@ -1033,13 +1033,13 @@ TEST(Game, get_ROCKET_Actions)
     ASSERT_TRUE(ranks.empty());
 }
 
-TEST(Game, getAllActions)
+TEST(Game, getAllActionsButPass)
 {
     std::unique_ptr<Game> game;
     std::vector<std::vector<Action_Rank>> ranks;
 
     game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2JBJR", "", "");
-    game->getAllActions(0, ranks);
+    game->getAllActionsButPass(0, ranks);
 
     ASSERT_EQ(ranks[ACTION_TYPE_SOLO], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}));
     ASSERT_EQ(ranks[ACTION_TYPE_SOLO_CHAIN_5], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7}));
@@ -1078,14 +1078,14 @@ TEST(Game, getAllActions)
     ASSERT_EQ(ranks[ACTION_TYPE_FOUR_TWO_PAIR], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
     ASSERT_EQ(ranks[ACTION_TYPE_BOMB], std::vector<int>({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}));
     ASSERT_EQ(ranks[ACTION_TYPE_ROCKET], std::vector<int>({0}));
-    ASSERT_EQ(ranks[ACTION_TYPE_PASS], std::vector<int>({0}));
+    ASSERT_EQ(ranks[ACTION_TYPE_PASS], std::vector<int>());
 
     game = createGame("S3H3C3D3S4H4C4D4", "", "");
-    game->getAllActions(0, ranks);
+    game->getAllActionsButPass(0, ranks);
     ASSERT_TRUE(ranks[ACTION_TYPE_FOUR_TWO_PAIR].empty());
 
     game = createGame("S3H3C3D3S4H4C4D4", "", "");
-    game->getAllActions(0, ranks);
+    game->getAllActionsButPass(0, ranks);
     ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_SOLO_CHAIN_2].empty());
     ASSERT_TRUE(ranks[ACTION_TYPE_TRIO_PAIR_CHAIN_2].empty());
 }
@@ -1106,6 +1106,8 @@ TEST(Game, getLegalActions)
     game = createGame("S3H3C3D3S4H4C4D4S5H5C5D5S6H6C6D6S7H7C7D7S8H8C8D8S9H9C9D9STHTCTDTSJHJCJDJSQHQCQDQSKHKCKDKSAHACADAS2H2C2D2", "JB", "JR");
     game->getLegalActions(legalActions);
 
+    // no PASS
+    ASSERT_TRUE(legalActions[ACTION_TYPE_PASS].empty());
     std::vector<int> v({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14});
     // no JB, JR for type solo
     EXPECT_THAT(legalActions[0], std::vector<Action_Rank>(v.begin(), v.begin() + 12 + 1));
@@ -1185,7 +1187,7 @@ TEST(Game, getLegalActions)
         game->play(passAction); // landlord play pass, test getAllActions
         game->getLegalActions(legalActions);
         std::vector<std::vector<Action_Rank>> player1AllActions;
-        game->getAllActions(1, player1AllActions);
+        game->getAllActionsButPass(1, player1AllActions);
         EXPECT_THAT(legalActions, player1AllActions);
     }
 }
