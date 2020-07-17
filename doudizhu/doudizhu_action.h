@@ -99,6 +99,8 @@ public:
 
     ~Action() {}
 
+    std::string toString();
+
     bool isValidTypeAndRank() const;
 
     inline const ActionDetails getDetails() const { return _details; }

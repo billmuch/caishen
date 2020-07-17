@@ -2,6 +2,9 @@
 #include "doudizhu_action.h"
 #include "doudizhu_utils.h"
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/base_sink.h>
+
 #include <iostream>
 
 namespace caishen
@@ -202,7 +205,9 @@ bool Game::play(Action &action)
     if (!_isTrain && !isValidAction(action))
     {
         return false;
-    }    
+    }
+
+    spdlog::debug("Player {} playing action {}", _playerId, action.toString());
 
     _history.push_back(action);
 
@@ -237,6 +242,9 @@ bool Game::playBack()
     }
 
     Action lastAction = _history.back();
+
+    spdlog::debug("Player {} playing back action {}", _playerId, lastAction.toString());
+
     _history.pop_back();
 
     _winnerId = -1;

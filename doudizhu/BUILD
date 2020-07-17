@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_test", "cc_library")
 
 cc_library(
     name = "libdoudizhu.so",
@@ -14,6 +14,7 @@ cc_library(
     copts = ["-Iexternal/eigen"],
     deps = [
         "@eigen",
+        "@spdlog"
     ],
     visibility = [
         "//mccfr:__pkg__"
